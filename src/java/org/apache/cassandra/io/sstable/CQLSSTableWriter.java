@@ -295,6 +295,7 @@ public class CQLSSTableWriter implements Closeable
 
         private boolean sorted = false;
         private long bufferSizeInMB = 128;
+        private SSTableWriterFactory writerFactory;
 
         protected Builder() {}
 
@@ -490,6 +491,19 @@ public class CQLSSTableWriter implements Closeable
             return this;
         }
 
+        /**
+         * This advanced option allows you to specify a factory used to create the underlying SSTableWriter. Use this
+         * mechanism to control the naming of the SSTables, the compaction strategy used, etc.
+         * This option overrides the sorted() option.
+         *
+         * @param writerFactory Factory used to create underlying SSTableWriter.
+         * @return this builder.
+         */
+        public Builder withSSTableWriterFactory(SSTableWriterFactory writerFactory) {
+            this.writerFactory = writerFactory;
+            return this;
+        }
+
         private static CFMetaData getTableMetadata(String schema)
         {
             CFStatement parsed = (CFStatement)QueryProcessor.parseStatement(schema);
@@ -530,9 +544,16 @@ public class CQLSSTableWriter implements Closeable
             if (insert == null)
                 throw new IllegalStateException("No insert statement specified, you should provide an insert statement through using()");
 
-            AbstractSSTableSimpleWriter writer = sorted
-                                               ? new SSTableSimpleWriter(directory, schema, insert.updatedColumns())
-                                               : new SSTableSimpleUnsortedWriter(directory, schema, insert.updatedColumns(), bufferSizeInMB);
+            AbstractSSTableSimpleWriter writer;
+            if (writerFactory == null) {
+                writer = sorted
+                  ? new SSTableSimpleWriter(directory, schema, insert.updatedColumns())
+                  : new SSTableSimpleUnsortedWriter(directory, schema, insert.updatedColumns(), bufferSizeInMB);
+
+            }
+            else {
+               writer = writerFactory.createWriter(directory, schema, insert.updatedColumns(), bufferSizeInMB);
+            }
 
             if (formatType != null)
                 writer.setSSTableFormatType(formatType);
